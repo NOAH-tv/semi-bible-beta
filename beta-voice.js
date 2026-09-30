@@ -14,14 +14,12 @@ function hz(value){return Number.isFinite(value)?Math.round(value).toLocaleStrin
 function voiceNote(value){if(!Number.isFinite(value)||value<=0)return '';const midi=Math.round(69+12*Math.log2(value/440));return ['도','도♯','레','레♯','미','파','파♯','솔','솔♯','라','라♯','시'][(midi%12+12)%12]+(Math.floor(midi/12)-1);}
 
 function voiceSummary(r){if(r?.metrics?.status==='ready')return hz(r.metrics.pitchMean)+' Hz'+(r.pace?.status==='ready'?' · '+r.pace.syllablesPerSecond.toFixed(1)+'음절/초':'');return analysisJobs.has(r?.id)?'분석 중':r?.metrics?'다시 확인':'녹음 분석';}
-
 function pitchComparison(value){if(!Number.isFinite(value))return '';const rel=ref=>Math.abs(value-ref)<10?'비슷해요':value>ref?'높아요':'낮아요';return `남성 평균보다 ${rel(120.8)} · 여성 평균보다 ${rel(217.1)}`.replaceAll('보다 비슷해요','과 비슷해요');}
 
 function pitchScale(m){const position=v=>Math.max(0,Math.min(100,Math.log2(Math.max(60,v)/60)/Math.log2(500/60)*100));return `<div class="pitch-scale" role="img" aria-label="목소리 높이: 나 ${hz(m.pitchMean)} Hz, 남성 참고 평균 121 Hz, 여성 참고 평균 217 Hz"><div class="pitch-track"><i class="pitch-own-range" style="left:${position(m.pitchRange.low)}%;width:${position(m.pitchRange.high)-position(m.pitchRange.low)}%"></i><b class="pitch-reference male" style="left:${position(120.8)}%"><span>남성<small>121 Hz</small></span></b><b class="pitch-reference female" style="left:${position(217.1)}%"><span>여성<small>217 Hz</small></span></b><b class="pitch-self" style="left:${position(m.pitchMean)}%"><span>나</span></b></div><div class="pitch-axis"><span>60 Hz</span><span>500 Hz</span></div></div><p class="pitch-range-copy">자주 낸 음 ${hz(m.pitchRange.low)}–${hz(m.pitchRange.high)} Hz</p>`;}
 
-function paceMarkup(r){const p=r.pace,working=analysisJobs.has(r.id);if(p?.status==='ready'){return `<div class="metric-title"><h3>말의 빠르기</h3><strong>${p.syllablesPerSecond.toFixed(1)} <small>음절/초</small></strong></div><div class="pace-options"><span class="${p.pace==='slow'?'active':''}">천천히</span><span class="${p.pace==='within'?'active':''}">연습 범위</span><span class="${p.pace==='fast'?'active':''}">빠르게</span></div><p>${p.pace==='fast'?'문장 사이에 한 박자 쉬어보세요.':p.pace==='slow'?'뜻이 이어지는 말은 조금 더 연결해보세요.':'지금은 연습 범위 안이에요.'}</p><small>연습 기준 3–5음절/초 · 인식 오차가 있을 수 있어요</small><details class="voice-note"><summary>인식한 말</summary><p>${esc(p.transcript)}</p><small>${p.syllables}음절 / ${p.seconds.toFixed(1)}초 · 중간 쉼 포함</small></details>`;}
+function paceMarkup(r){const p=r.pace,working=analysisJobs.has(r.id);if(p?.status==='offline')return '<div class="metric-title"><h3>말의 빠르기 · 울림</h3></div><p>정밀 분석에 연결하면 확인할 수 있어요.</p><button class="quiet-link" data-action="connect-analysis">연결하기</button>';if(p?.status==='ready'){return `<div class="metric-title"><h3>말의 빠르기</h3><strong>${p.syllablesPerSecond.toFixed(1)} <small>음절/초</small></strong></div><div class="pace-options"><span class="${p.pace==='slow'?'active':''}">천천히</span><span class="${p.pace==='within'?'active':''}">연습 범위</span><span class="${p.pace==='fast'?'active':''}">빠르게</span></div><p>${p.pace==='fast'?'문장 사이에 한 박자 쉬어보세요.':p.pace==='slow'?'뜻이 이어지는 말은 조금 더 연결해보세요.':'지금은 연습 범위 안이에요.'}</p><small>연습 기준 3–5음절/초 · 인식 오차가 있을 수 있어요</small><details class="voice-note"><summary>인식한 말</summary><p>${esc(p.transcript)}</p><small>${p.syllables}음절 / ${p.seconds.toFixed(1)}초 · 중간 쉼 포함</small></details>`;}
 return `<div class="metric-title"><h3>말의 빠르기</h3><strong>—</strong></div><p>${working?'말을 인식하고 있어요. 먼저 들어도 좋아요.':p?.status==='unavailable'?'말 인식 모델을 불러오지 못했어요.':p?.status==='loading'?'말 인식 모델을 준비 중이에요.':p?.status==='busy'?'다른 녹음을 분석 중이에요. 잠시 후 다시 눌러주세요.':p?.status==='uncertain'?'인식한 말이 부족해 빠르기를 계산하지 않았어요.':'말의 빠르기를 다시 확인할 수 있어요.'}</p>${!working?`<button class="quiet-link" data-analyze="${esc(r.id)}" data-pace-only="true">빠르기 다시 확인</button>`:''}`;}
-
 function voiceImage(m){
  const fs=m?.formants;if(!fs||fs.length<3||!fs.every(Number.isFinite)||!(fs[0]<fs[1]&&fs[1]<fs[2]))return {label:'울림을 더 살펴볼게요',copy:'다음 문장을 편하게 읽어주세요.'};
  // A provisional timbre description, not a personality or listener-impression classifier.
@@ -31,9 +29,8 @@ function voiceImage(m){
 
 function levelMarkup(m){const level=m?.level;if(!level)return '';const labels={soft:'조금 더 크게',usable:'잘 담겼어요',loud:'조금 더 편하게',clipped:'소리를 줄여주세요'};let guide=level.state==='soft'?'30cm 거리를 유지하고, 소리를 조금 더 크게 내보세요.':level.state==='clipped'||level.state==='loud'?'30cm 거리를 유지하고, 힘을 빼고 조금 작게 말해보세요.':level.span==='narrow'?'중요한 말을 조금 더 크게, 편하게 읽어보세요.':'지금 크기로 편하게 읽어주세요.';return `<div class="voice-metric"><div class="metric-title"><h3>소리 크기 · 강약</h3><span class="metric-word">${labels[level.state]||'확인 중'}</span></div>${level.span?`<div class="range-options"><span class="${level.span==='narrow'?'active':''}">강약이 작아요</span><span class="${level.span==='varied'?'active':''}">강약이 있어요</span></div>`:''}<p>${guide}</p><small>같은 30cm 거리에서 비교해요.</small></div>`;}
 
-function stabilityLabel(m){return !Number.isFinite(m?.hnr)?'—':m.hnr>18?'안정 쪽':m.hnr<11?'흔들림 쪽':'중간';}
-
-function stabilityMarkup(m){if(!Number.isFinite(m?.hnr))return '';const position=Math.max(0,Math.min(100,(25-m.hnr)/20*100)),label=stabilityLabel(m);return `<div class="voice-metric"><div class="metric-title"><h3>소리 안정감</h3><span class="metric-word">${label}</span></div><div class="stability-track" role="img" aria-label="소리 안정감: ${label}"><i style="left:${position}%"></i></div><div class="stability-labels"><span>안정</span><span>흔들림</span></div><small>소리의 규칙성으로 본 참고 표시예요.</small></div>`;}
+function stabilityLabel(m){if(Number.isFinite(m?.regularity))return m.regularity>=.92?'안정 쪽':m.regularity<.8?'흔들림 쪽':'중간';return !Number.isFinite(m?.hnr)?'—':m.hnr>18?'안정 쪽':m.hnr<11?'흔들림 쪽':'중간';}
+function stabilityMarkup(m){const device=Number.isFinite(m?.regularity);if(!device&&!Number.isFinite(m?.hnr))return '';const position=Math.max(0,Math.min(100,device?(1-m.regularity)/.4*100:(25-m.hnr)/20*100)),label=stabilityLabel(m);return `<div class="voice-metric"><div class="metric-title"><h3>소리 안정감</h3><span class="metric-word">${label}</span></div><div class="stability-track" role="img" aria-label="소리 안정감: ${label}"><i style="left:${position}%"></i></div><div class="stability-labels"><span>안정</span><span>흔들림</span></div><small>소리 반복의 규칙성을 보는 연습용 표시예요.</small></div>`;}
 
 function balanceMarkup(r){const b=r.metrics?.balance,working=analysisJobs.has(r.id),old=r.metrics?.version<3||b&&b.basis!==BALANCE_BASIS;let html='<div class="voice-metric"><div class="metric-title"><h3>저음 · 중음 · 고음</h3><small>보정된 대역 비중</small></div>';
  if(old)return html+`<p>${working?'새 기준으로 살펴보고 있어요.':r.analysisError?'분석에 연결하지 못했어요. 다시 눌러주세요.':'저음에 몰리던 계산 기준을 바꿨어요.'}</p>${working?'':`<button class="secondary" data-analyze="${esc(r.id)}" data-acoustic-only="true">새 기준으로 보기</button>`}</div>`;
@@ -41,12 +38,11 @@ function balanceMarkup(r){const b=r.metrics?.balance,working=analysisJobs.has(r.
  html+=`<div class="balance-track" aria-hidden="true">${b.percent.map((v,i)=>`<i class="band-${i}" style="flex:${v}"></i>`).join('')}</div><div class="balance-labels">${['저음','중음','고음'].map((name,i)=>`<div><span>${name}</span><strong>${b.percent[i]}<small>%</small></strong><small>(${b.bandsHz[i][0].toLocaleString('ko-KR')}–${b.bandsHz[i][1].toLocaleString('ko-KR')} Hz)</small></div>`).join('')}</div><p>같은 휴대폰·30cm 거리에서 비교해요.</p><small>비교용 비중이에요. 세 수치를 같게 맞출 필요는 없어요.</small></div>`;return html;}
 
 function voiceDetails(r){const m=r.metrics,ready=m?.status==='ready',working=analysisJobs.has(r.id);let content='';
- if(ready){const image=voiceImage(m);content=`<div class="voice-metric voice-image"><small>울림으로 본 참고 이미지</small><h3>${image.label}</h3><p>${image.copy}</p><small>읽은 모음과 녹음 환경에 따라 달라져요.</small></div><div class="voice-metric"><div class="metric-title"><h3>목소리 높이</h3><strong>${hz(m.pitchMean)} <small>Hz · ${voiceNote(m.pitchMean)}</small></strong></div>${pitchScale(m)}<p>${pitchComparison(m.pitchMean)}</p><small>남성·여성 표시는 연구 평균 · 맞춰야 할 높이는 아니에요</small></div>${balanceMarkup(r)}${levelMarkup(m)}${stabilityMarkup(m)}<div class="voice-metric">${paceMarkup(r)}</div>`;}
+ if(ready){const image=voiceImage(m);content=`${m.method==='device'?'<p class="tiny">기기 분석</p>':''}${m.formants?`<div class="voice-metric voice-image"><small>울림으로 본 참고 이미지</small><h3>${image.label}</h3><p>${image.copy}</p><small>읽은 모음과 녹음 환경에 따라 달라져요.</small></div>`:''}<div class="voice-metric"><div class="metric-title"><h3>목소리 높이</h3><strong>${hz(m.pitchMean)} <small>Hz · ${voiceNote(m.pitchMean)}</small></strong></div>${pitchScale(m)}<p>${pitchComparison(m.pitchMean)}</p><small>남성·여성 표시는 연구 평균 · 맞춰야 할 높이는 아니에요</small></div>${balanceMarkup(r)}${levelMarkup(m)}${stabilityMarkup(m)}<div class="voice-metric">${paceMarkup(r)}</div>`;}
  else content=`<div class="voice-metric"><p role="status">${working?'목소리를 분석하고 있어요.':m?VOICE_STATUS[m.status]||'분석을 다시 시도해 주세요.':r.analysisError?'분석에 연결하지 못했어요. 녹음은 그대로 남아 있어요.':'이 녹음의 높이와 음역대를 확인해요.'}</p>${!working?`<button class="secondary" data-analyze="${esc(r.id)}">${m?'다시 분석':'목소리 분석'}</button>`:''}</div>`;
  content+=goalMarkup(m);
  return content+`<button class="quiet-link method-link" data-action="voice-method">측정 기준</button>${r.unsaved?'<p class="storage-warning">분석 결과를 기기에 저장하지 못했어요. 음성은 내려받을 수 있어요.</p>':''}`;
 }
-
 function coachAdvice(r,goal=goalSettings()){
  const m=r.metrics,tips=[];const add=(finding,action)=>tips.push({finding,action});
  if(m?.status!=='ready')return [{finding:'목소리를 한 번 더 담아볼까요?',action:VOICE_STATUS[m?.status]||'같은 문장을 편하게 끝까지 읽어주세요.'}];
@@ -55,29 +51,28 @@ function coachAdvice(r,goal=goalSettings()){
  if(r.pace?.status==='ready'&&r.pace.pace==='fast')add('말이 조금 빨라요','쉼표에서 한 박자 쉬고, 마지막 말까지 또렷하게.');
  else if(r.pace?.status==='ready'&&r.pace.pace==='slow')add('말이 조금 느려요','뜻이 이어지는 말은 한 덩어리로 읽어보세요.');
  if(goal.hz&&classifyPitch(m.pitchMean,goal.hz)!=='match')add(`정한 높이보다 ${m.pitchMean>goal.hz?'높아요':'낮아요'}`,`기준음 ${hz(goal.hz)} Hz를 듣고, 편한 만큼 ${m.pitchMean>goal.hz?'낮춰':'높여'} 읽어보세요.`);
- if(m.hnr<11)add('소리가 고르지 않게 담겼어요','조용한 곳에서, 문장 끝까지 비슷한 크기로 읽어보세요.');
+ if((Number.isFinite(m.regularity)&&m.regularity<.8)||(Number.isFinite(m.hnr)&&m.hnr<11))add('소리가 고르지 않게 담겼어요','조용한 곳에서, 문장 끝까지 비슷한 크기로 읽어보세요.');
  if(m.level?.span==='narrow')add('소리 크기의 변화가 작아요','중요한 단어 하나를 골라 조금 더 힘을 실어보세요.');
  const b=m.balance;if(b?.basis===BALANCE_BASIS&&Math.max(...b.percent)>=60){const i=b.percent.indexOf(Math.max(...b.percent));add(`${['저음','중음','고음'][i]} 쪽 비중이 커요`,['가볍게 “음—” 하고, 말끝까지 또렷하게 읽어보세요.','중요한 단어에 표정을 담아, 높낮이를 조금 바꿔보세요.','첫 말을 조금 낮고 편하게 시작해보세요.'][i]);}
  if(!tips.length)add('지금 흐름을 유지해요','중요한 단어 하나에 뜻을 담아 다시 읽어보세요.');
  return tips.slice(0,2);
 }
-
 function deltaLabel(a,b,unit='',digits=0){if(!Number.isFinite(a)||!Number.isFinite(b))return '—';const d=Number((Number(b.toFixed(digits))-Number(a.toFixed(digits))).toFixed(digits));return d===0?'같음':`${d>0?'+':'−'}${Math.abs(d).toFixed(digits)}${unit}`;}
 
 function comparisonRows(first,last){
+ const sameEngine=(first.metrics?.comparisonKey||'praat-v3')===(last.metrics?.comparisonKey||'praat-v3');
  const a=first.metrics?.status==='ready'?first.metrics:null,b=last.metrics?.status==='ready'?last.metrics:null;
- const rows=[{label:'목소리 높이',a:a?hz(a.pitchMean)+' Hz':'—',b:b?hz(b.pitchMean)+' Hz':'—',change:deltaLabel(a?.pitchMean,b?.pitchMean,' Hz')}];
- const aBands=a?.balance?.basis===BALANCE_BASIS,bBands=b?.balance?.basis===BALANCE_BASIS,sameBasis=aBands&&bBands;
+ const rows=[{label:'목소리 높이',a:a?hz(a.pitchMean)+' Hz':'—',b:b?hz(b.pitchMean)+' Hz':'—',change:sameEngine?deltaLabel(a?.pitchMean,b?.pitchMean,' Hz'):'기준 다름'}];
+ const aBands=a?.balance?.basis===BALANCE_BASIS,bBands=b?.balance?.basis===BALANCE_BASIS,sameBasis=aBands&&bBands&&sameEngine;
  ['저음','중음','고음'].forEach((label,i)=>rows.push({label,band:i,a:aBands?a.balance.percent[i]+'%':'—',b:bBands?b.balance.percent[i]+'%':'—',change:sameBasis?deltaLabel(a.balance.percent[i],b.balance.percent[i],'%p'):'—'}));
  const stableA=stabilityLabel(a),stableB=stabilityLabel(b);
- rows.push({label:'안정감',a:stableA,b:stableB,change:stableA==='—'||stableB==='—'?'—':stableA===stableB?'같음':stableB+'으로'});
+ rows.push({label:'안정감',a:stableA,b:stableB,change:!sameEngine||stableA==='—'||stableB==='—'?'—':stableA===stableB?'같음':stableB+'으로'});
  const paceA=first.pace?.status==='ready'?first.pace.syllablesPerSecond:null,paceB=last.pace?.status==='ready'?last.pace.syllablesPerSecond:null;
  rows.push({label:'빠르기',a:Number.isFinite(paceA)?paceA.toFixed(1):'—',b:Number.isFinite(paceB)?paceB.toFixed(1):'—',change:deltaLabel(paceA,paceB,'',1)});
  const levels={soft:'작게 담김',usable:'잘 담김',loud:'크게 담김',clipped:'소리 잘림'},la=levels[a?.level?.state]||'—',lb=levels[b?.level?.state]||'—';
  rows.push({label:'소리 크기',a:la,b:lb,change:la==='—'||lb==='—'?'—':la===lb?'같음':'달라짐'});
  return rows;
 }
-
 function classifyPitch(hz,target){if(!Number.isFinite(hz)||!Number.isFinite(target)||hz<=0||target<=0)return 'idle';const cents=1200*Math.log2(hz/target);return Math.abs(cents)<=200?'match':cents>0?'high':'low';}
 
 function resetPitchFeedback(){const edge=$('pitch-edge');if(edge)edge.dataset.state='idle';const text=$('pitch-status');if(text)text.textContent='';}
