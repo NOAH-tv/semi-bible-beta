@@ -8,6 +8,7 @@ const BibleSpeech=(()=>{
    // Only confirmed text persists as read. Interim matches are a reversible preview.
    const preview={...s,reading:structuredClone(s.reading)};
    const result=trackReading(m.final?s:preview,heard),lit=new Set(result?.lit||[]),confirmed=new Set(s.reading?.lit||[]);
+   if(typeof armAutoNext==='function')armAutoNext(r,result,(m.words||[]).filter(w=>w.start>=start-.1));
    document.querySelectorAll('#reading-verse [data-syllable]').forEach(el=>{const n=Number(el.dataset.syllable);el.classList.toggle('speech-heard',confirmed.has(n));el.classList.toggle('speech-hearing',lit.has(n)&&!confirmed.has(n));});
    const el=document.getElementById('bible-speech-status');if(el){el.textContent='읽기 '+Math.round(lit.size/Math.max(1,norm(s.text).length)*100)+'%';if(m.text&&!el.dataset.firstResultMs)el.dataset.firstResultMs=String(Date.now()-r.started);}
   }});
