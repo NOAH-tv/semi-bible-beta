@@ -10,7 +10,7 @@ const BibleSpeech=(()=>{
    const result=trackReading(m.final?s:preview,heard),lit=new Set(result?.lit||[]),confirmed=new Set(s.reading?.lit||[]);
    if(typeof armAutoNext==='function')armAutoNext(r,result,(m.words||[]).filter(w=>w.start>=start-.1));
    document.querySelectorAll('#reading-verse [data-syllable]').forEach(el=>{const n=Number(el.dataset.syllable);el.classList.toggle('speech-heard',confirmed.has(n));el.classList.toggle('speech-hearing',lit.has(n)&&!confirmed.has(n));});
-   const el=document.getElementById('bible-speech-status');if(el){el.textContent='읽기 '+Math.round(lit.size/Math.max(1,norm(s.text).length)*100)+'%';if(m.text&&!el.dataset.firstResultMs)el.dataset.firstResultMs=String(Date.now()-r.started);}
+   const el=document.getElementById('bible-speech-status');if(el){el.textContent='';if(m.text&&!el.dataset.firstResultMs)el.dataset.firstResultMs=String(Date.now()-r.started);}
   }});
  }
  async function finish(r){const result=await r.speech?.finish();if(result)r.session.deviceTranscript=result;return result?.transcript||'';}
