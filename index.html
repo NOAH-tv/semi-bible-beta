@@ -755,11 +755,25 @@ function bandForce(){                                                // 한 걸�
   }
 }
 
+/* ---------------- 품질 단계: 폰 성능에 맞춰 격자·해상도 조절 ---------------- */
+const WQS = [{ cell: 1.7, px: 2400000, dpr: 2 }, { cell: 2.3, px: 1500000, dpr: 2 }, { cell: 3, px: 950000, dpr: 1.5 }, { cell: 3.8, px: 600000, dpr: 1.25 }];
+const WQ_KEY = "pilsa-water-q";
+let WQ = 0, WQ_CAP = 0, qN = 0, qDt = 0, qWork = 0, qOff = 0, qGood = 0, qWarm = 0, qLastUp = false, qT0 = 0, qLastWork = 0;
+(function qInit(){
+  let saved = null; try { saved = JSON.parse(localStorage.getItem(WQ_KEY) || "null"); } catch (e){}
+  let q = saved && Number.isFinite(saved.q) ? saved.q : 0;
+  WQ_CAP = saved && saved.cap != null && Date.now() - (saved.capAt || 0) < 7 * 864e5 ? saved.cap : 0;
+  if (navigator.deviceMemory && navigator.deviceMemory <= 2) q = Math.max(q, 1);   // 메모리 2GB 이하 안드로이드는 한 단계 낮게 시작
+  const force = new URLSearchParams(location.search).get("wq"); if (force !== null) q = +force;
+  WQ = Math.min(WQS.length - 1, Math.max(0, q | 0, WQ_CAP));
+})();
+function qSave(){ try { localStorage.setItem(WQ_KEY, JSON.stringify({ q: WQ, cap: WQ_CAP, capAt: WQ_CAP ? Date.now() : 0 })); } catch (e){} }
+
 /* ---------------- 물 표면: 높이장 파동 ---------------- */
 let GW = 229, GH = 500, CELL = 1.7, SPS = 100, DAMP = 0.99, VISC = 0.02, A, B, D, D2, HV = null, HA = 1, simCv = null, simCtx = null, img = null;
 function initSim(){
   const oW = GW, oH = GH, oA = A, oB = B, oD = D;
-  GW = Math.round(clamp(innerWidth / 1.7, 200, 640));                // 격자 한 칸 ≈ 화면 1.7px
+  GW = Math.round(clamp(innerWidth / WQS[WQ].cell, 90, 640));          // 격자 한 칸 ≈ 화면 1.7px(품질 0)
   GH = Math.round(clamp(GW * innerHeight / Math.max(1, innerWidth), 150, 900));
   A = new Float32Array(GW * GH); B = new Float32Array(GW * GH);
   D = new Float32Array(GW * GH).fill(1); D2 = new Float32Array(GW * GH);
@@ -1210,7 +1224,7 @@ function edgeTick(f){
  function glassRadius(box,style){const value=style.borderTopLeftRadius,r=parseFloat(value)||0;return Math.min(box.width/2,box.height/2,value.endsWith('%')?Math.min(box.width,box.height)*r/100:r);}
  function glassOpacity(el,style){const nav=el.closest('.bottom-nav');return Number(style.opacity)*(nav&&nav!==el?Number(getComputedStyle(nav).opacity):1)*uiV;}
  function measure(){LENS=[];return;LENS=[...document.querySelectorAll('.bottom-nav,.nav-glass-indicator'),...document.querySelectorAll('.record-button,.primary,.secondary')].filter(e=>{const b=e.getBoundingClientRect();return b.width>2&&b.bottom>0&&b.top<innerHeight&&getComputedStyle(e).visibility!=='hidden';}).slice(0,5).map(e=>[e,e.classList.contains('nav-glass-indicator')?1.035:1.018]);}
- function resize(){S=Math.min(devicePixelRatio||1,2,Math.sqrt(2400000/(innerWidth*innerHeight)));W=Math.round(innerWidth*S);H=Math.round(innerHeight*S);cv.width=W;cv.height=H;initSim();if(ctx)buildEdge();measure();wake();}
+ function resize(){const Q=WQS[WQ];S=Math.min(devicePixelRatio||1,Q.dpr,Math.sqrt(Q.px/(innerWidth*innerHeight)));W=Math.round(innerWidth*S);H=Math.round(innerHeight*S);cv.width=W;cv.height=H;initSim();if(ctx)buildEdge();measure();wake();}
  function setStage(next){if(stage!==next){if(next==='white'){completionAt=performance.now();completion=motion()?0:1;light=Math.max(light,.58);D?.fill(0);if(motion())ring(.5,.44,50,1.4);}else completion=-1;if(burstOn){}else if(next==='welcome')D?.fill(1);else if(next==='rest')D?.fill(0);}stage=next;document.body.dataset.waterStage=stage;cv.dataset.stage=stage;}
  // 이번 녹음에서 읽을 글 전체: 고른 절들, 장 이어 읽기면 시작 절부터 그 장 끝까지, 아니면 화면의 글
  function readingTotal(s){if(s.continuous&&s.book&&s.chapter){const vs=chapterVerses(s.book,s.chapter),from=s.verse||1,pick=Array.isArray(s.queue)?new Set([from,...s.queue]):null;return vs.filter(v=>pick?pick.has(v.v):v.v>=from).map(v=>v.t).join(' ');}return s.text||'';}
@@ -1237,7 +1251,11 @@ function edgeTick(f){
    for(let x=x0;x<i0&&x<=x1;x++)cell(x,y);if(i1>=i0){D.fill(0,y*GW+i0,y*GW+i1+1);}for(let x=Math.max(i0,i1+1);x<=x1;x++)cell(x,y);}}
  function resetLight(){voiceAmt=0;lightR=0;crossT=0;crossBoost=0;D?.fill(1);}
  function voice(r,rms){V.ac=r.ac;V.an=r.an;voiceAt=performance.now();talking=rms>.004;if(!frequency||frequency.length!==r.an.frequencyBinCount)frequency=new Uint8Array(r.an.frequencyBinCount);r.an.getByteFrequencyData(frequency);const el=document.querySelector('.record-button')||$('mouth-camera')||document.querySelector('.tuner-readout')||$('listen-toggle');if(exporting||stage==='first'||stage==='listen'){bandX=.5;bandY=.5;glowX=.5;glowY=.5;}else if(el){const box=el.getBoundingClientRect();bandX=clamp((box.left+box.width/2)/innerWidth,.03,.97);bandY=clamp((box.top+box.height/2)/innerHeight,.03,.97);glowX=bandX;glowY=bandY;}wake();}
- function frame(now){raf=0;if(document.hidden)return;const dt=Math.min(.05,last?(now-last)/1000:.016);last=now;T+=dt;
+ function qualityTick(raw){if(exporting||!raw||raw>250||!motion())return;if(qWarm<10){qWarm++;return;}qN++;qDt+=raw;qWork+=qLastWork;if(Math.abs(raw-33.3)>5)qOff++;if(qN<90&&(qDt<1200||qN<12))return;const avg=qDt/qN,work=qWork/qN,off=qOff/qN;qN=0;qDt=0;qWork=0;qOff=0;
+  if(avg>24&&(work>10||off>.25)){qGood=0;if(WQ<WQS.length-1){if(qLastUp){WQ_CAP=WQ+1;}qLastUp=false;setQuality(WQ+1);}}
+  else if(avg<18&&WQ>WQ_CAP){if(++qGood>=2){qGood=0;qLastUp=true;setQuality(WQ-1);}}else qGood=0;}
+ function setQuality(q){q=Math.min(WQS.length-1,Math.max(0,q));if(q===WQ)return;WQ=q;qWarm=0;qN=0;qDt=0;qWork=0;qOff=0;qSave();cv.dataset.quality=WQ;resize();}
+ function frame(now){raf=0;if(document.hidden)return;qualityTick(last?now-last:0);qT0=performance.now();const dt=Math.min(.05,last?(now-last)/1000:.016);last=now;T+=dt;
  const active=!!(recording||playbackVisual||(typeof BetaVoice!=='undefined'&&BetaVoice.active))&&now-voiceAt<400,f=active?frequency:null,speaking=active&&talking;
  completion=stage==='white'?(motion()?Math.min(1,(now-completionAt)/2800):1):-1;
  const cap=stage==='first'?(guided?1-.65*progressValue:complete?0:1-.7*progressValue):stage==='listen'?(exporting?1-listenRatio:.35*(1-listenRatio)):stage==='welcome'?1:stage==='entry'?.82:0;lightTarget=burstOn?.42*crossBoost:stage==='second'?.12+.36*progressValue:stage==='prayer'?.58:stage==='white'?.58+.42*completion:stage==='coach'?.1:stage==='listen'?.08*listenRatio+.42*crossBoost:stage==='first'&&crossBoost>0?.42*crossBoost:stage==='entry'?.025:0;light=stage==='white'?lightTarget:light+(lightTarget-light)*(motion()?1-Math.exp(-dt/.9):1);cv.dataset.completion=completion.toFixed(3);cv.dataset.darkness=cap.toFixed(3);cv.dataset.light=light.toFixed(3);
@@ -1245,10 +1263,10 @@ function edgeTick(f){
  else{D.fill(cap);edgeV=0;glowA=0;}
  edgeT=active?(speaking?1:.3):0;edgeV+=(edgeT-edgeV)*(1-Math.exp(-dt/.25));glowT=Math.max(speaking?1:active?.35:0,glowT*Math.exp(-dt*1.2));glowA+=(glowT-glowA)*(1-Math.exp(-dt/.25));stepPalette(dt);
  flashes.forEach(f=>f.t+=dt);flashes=flashes.filter(f=>f.t<1.6);if(!motion())flashes=[];
- if(now-lastLayout>250){measure();lastLayout=now;}if(gl)renderGL();else render2D();window.__waterFrame?.(cv);if(motion())raf=requestAnimationFrame(frame);
+ if(now-lastLayout>250){measure();lastLayout=now;}if(gl)renderGL();else render2D();window.__waterFrame?.(cv);qLastWork=performance.now()-qT0;if(motion())raf=requestAnimationFrame(frame);
  }
  function wake(){if(!raf&&!document.hidden){last=0;raf=requestAnimationFrame(frame);}}
- if(!initGL())use2D();document.body.dataset.waterRenderer=cv.dataset.renderer;resize();refresh();document.addEventListener('pointerdown',e=>{if(!motion()||e.target.closest('input,textarea,select,dialog,audio'))return;ring(e.clientX/innerWidth,e.clientY/innerHeight,27,1.2);wake();},{passive:true});
+ if(!initGL())use2D();document.body.dataset.waterRenderer=cv.dataset.renderer;cv.dataset.quality=WQ;resize();refresh();document.addEventListener('pointerdown',e=>{if(!motion()||e.target.closest('input,textarea,select,dialog,audio'))return;ring(e.clientX/innerWidth,e.clientY/innerHeight,27,1.2);wake();},{passive:true});
  window.addEventListener('resize',resize,{passive:true});window.addEventListener('scroll',measure,{passive:true});document.addEventListener('visibilitychange',()=>{if(document.hidden){cancelAnimationFrame(raf);raf=0;}else wake();});matchMedia('(prefers-reduced-motion: reduce)').addEventListener('change',()=>{A.fill(0);B.fill(0);wake();});
  return {begin,sound,playback,voice,refresh,wake,crossBurst(){if(!motion())return;burstOn=true;burstT=0;crossT=0;crossBoost=0;wake();},exportMode(on){exporting=!!on;if(on){resetLight();light=0;listenRatio=0;bandX=bandY=glowX=glowY=.5;}wake();},entry(){setStage('entry');measure();if(motion())ring(.5,.5,48,1.1);wake();},quiet(){V.ac=null;V.an=null;frequency=null;talking=false;wake();},paletteKey(){return palKey;},palette(key){if(!paletteAvailable(key))return;palKey=key;settings.palette=key;saveSettings();refresh();}};
 })();
