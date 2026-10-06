@@ -756,7 +756,7 @@ function bandForce(){                                                // 한 걸�
 }
 
 /* ---------------- 물 표면: 높이장 파동 ---------------- */
-let GW = 229, GH = 500, CELL = 1.7, SPS = 100, DAMP = 0.99, VISC = 0.02, A, B, D, D2, simCv = null, simCtx = null, img = null;
+let GW = 229, GH = 500, CELL = 1.7, SPS = 100, DAMP = 0.99, VISC = 0.02, A, B, D, D2, HV = null, HA = 1, simCv = null, simCtx = null, img = null;
 function initSim(){
   const oW = GW, oH = GH, oA = A, oB = B, oD = D;
   GW = Math.round(clamp(innerWidth / 1.7, 200, 640));                // 격자 한 칸 ≈ 화면 1.7px
@@ -1064,10 +1064,11 @@ function use2D(){
   gl = null; G = null;
   ctx = cv.getContext("2d", { alpha: false });cv.dataset.renderer="canvas2d";
 }
+function blendH(){const n=GW*GH;if(HA>=1||!B||B.length!==n)return A;if(!HV||HV.length!==n)HV=new Float32Array(n);const a=A,b=B,h=HV,t=HA;for(let i=0;i<n;i++)h[i]=b[i]+(a[i]-b[i])*t;return h;}
 function renderGL(){
   const g = gl, u = G.u;
   g.viewport(0, 0, W, H);
-  g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D, G.tH); g.texSubImage2D(g.TEXTURE_2D, 0, 0, 0, GW, GH, g.RED, g.FLOAT, A);
+  g.activeTexture(g.TEXTURE0); g.bindTexture(g.TEXTURE_2D, G.tH); g.texSubImage2D(g.TEXTURE_2D, 0, 0, 0, GW, GH, g.RED, g.FLOAT, blendH());
   g.activeTexture(g.TEXTURE1); g.bindTexture(g.TEXTURE_2D, G.tD); g.texSubImage2D(g.TEXTURE_2D, 0, 0, 0, GW, GH, g.RED, g.FLOAT, D);
   g.activeTexture(g.TEXTURE2); g.bindTexture(g.TEXTURE_2D, G.tE); g.texSubImage2D(g.TEXTURE_2D, 0, 0, 0, EN, 1, g.RED, g.UNSIGNED_BYTE, edgeB);
   g.uniform2f(u.uRes, W, H); g.uniform2f(u.uSim, GW, GH); g.uniform1f(u.uPx, S); g.uniform1f(u.uTime, T % 3600); g.uniform1f(u.uLight, light); g.uniform1f(u.uCompletion, completion); g.uniform1f(u.uCs, 1.667 / CELL);
@@ -1227,14 +1228,20 @@ function edgeTick(f){
  document.body.dataset.palette=palKey;measure();wake();}
  let exporting=false,voiceAmt=0,lightR=0,expectedVoice=10,crossT=0,crossBoost=0,burstOn=false,burstT=0;
  // 가운데 빛: 반지름 = 쌓인 목소리 양(초)에 따라 천천히 커짐. 경계는 부드럽게, 지나간 자리는 다시 어두워지지 않음
- function radialDark(dt,speaking,full){if(speaking)voiceAmt+=dt;const Rmax=Math.hypot(GW/2,GH/2)*1.08,prog=stage==='listen'?listenRatio:voiceAmt/Math.max(2,expectedVoice);crossT=full?Math.min(4,crossT+dt*2.4):0;crossBoost=full?Math.min(1,Math.max(0,(crossT-1.2)/1.4)):0;const target=full?Rmax*1.25:Rmax*.97*Math.sqrt(Math.min(1,prog));lightR+=(target-lightR)*(1-Math.exp(-dt/(full?1.4:.9)));const soft=Rmax*.22,cx=GW/2,cy=GH/2,R=lightR,ease=u=>1-Math.pow(1-Math.min(1,Math.max(0,u)),3);for(let y=0;y<GH;y++){const dy=y-cy;for(let x=0;x<GW;x++){const i=y*GW+x,t=(Math.hypot(x-cx,dy)-R+soft)/soft;let v=t<=0?0:t>=1?1:t*t*(3-2*t);if(crossBoost>0)v*=1-crossBoost;if(D[i]>v)D[i]=v;}}}
+ function radialDark(dt,speaking,full){if(speaking)voiceAmt+=dt;const Rmax=Math.hypot(GW/2,GH/2)*1.08,prog=stage==='listen'?listenRatio:voiceAmt/Math.max(2,expectedVoice);crossT=full?Math.min(4,crossT+dt*2.4):0;crossBoost=full?Math.min(1,Math.max(0,(crossT-1.2)/1.4)):0;const target=full?Rmax*1.25:Rmax*.97*Math.sqrt(Math.min(1,prog));lightR+=(target-lightR)*(1-Math.exp(-dt/(full?1.4:.9)));const soft=Rmax*.22,cx=GW/2,cy=GH/2,R=lightR;darkDisk(cx,cy,R,soft,crossBoost);}
+ // 둥근 빛을 어둠(D)에 새김: 바깥(빛 반지름 밖)은 그대로, 완전히 밝은 안쪽은 0, 그 사이 띠만 계산
+ function darkDisk(cx,cy,R,soft,boost){const cell=(x,y)=>{const i=y*GW+x,t=(Math.hypot(x-cx,y-cy)-R+soft)/soft;let v=t<=0?0:t>=1?1:t*t*(3-2*t);if(boost>0)v*=1-boost;if(D[i]>v)D[i]=v;};
+  if(boost>0){for(let y=0;y<GH;y++)for(let x=0;x<GW;x++)cell(x,y);return;}const Ri=R-soft;
+  for(let y=0;y<GH;y++){const dy=y-cy;if(Math.abs(dy)>=R)continue;const h=Math.sqrt(R*R-dy*dy),x0=Math.max(0,Math.floor(cx-h)),x1=Math.min(GW-1,Math.ceil(cx+h));let i0=x1+1,i1=x1;
+   if(Ri>0&&Math.abs(dy)<Ri){const hi=Math.sqrt(Ri*Ri-dy*dy);i0=Math.max(x0,Math.ceil(cx-hi)+1);i1=Math.min(x1,Math.floor(cx+hi)-1);if(i1<i0){i0=x1+1;i1=x1;}}
+   for(let x=x0;x<i0&&x<=x1;x++)cell(x,y);if(i1>=i0){D.fill(0,y*GW+i0,y*GW+i1+1);}for(let x=Math.max(i0,i1+1);x<=x1;x++)cell(x,y);}}
  function resetLight(){voiceAmt=0;lightR=0;crossT=0;crossBoost=0;D?.fill(1);}
  function voice(r,rms){V.ac=r.ac;V.an=r.an;voiceAt=performance.now();talking=rms>.004;if(!frequency||frequency.length!==r.an.frequencyBinCount)frequency=new Uint8Array(r.an.frequencyBinCount);r.an.getByteFrequencyData(frequency);const el=document.querySelector('.record-button')||$('mouth-camera')||document.querySelector('.tuner-readout')||$('listen-toggle');if(exporting||stage==='first'||stage==='listen'){bandX=.5;bandY=.5;glowX=.5;glowY=.5;}else if(el){const box=el.getBoundingClientRect();bandX=clamp((box.left+box.width/2)/innerWidth,.03,.97);bandY=clamp((box.top+box.height/2)/innerHeight,.03,.97);glowX=bandX;glowY=bandY;}wake();}
  function frame(now){raf=0;if(document.hidden)return;const dt=Math.min(.05,last?(now-last)/1000:.016);last=now;T+=dt;
  const active=!!(recording||playbackVisual||(typeof BetaVoice!=='undefined'&&BetaVoice.active))&&now-voiceAt<400,f=active?frequency:null,speaking=active&&talking;
  completion=stage==='white'?(motion()?Math.min(1,(now-completionAt)/2800):1):-1;
  const cap=stage==='first'?(guided?1-.65*progressValue:complete?0:1-.7*progressValue):stage==='listen'?(exporting?1-listenRatio:.35*(1-listenRatio)):stage==='welcome'?1:stage==='entry'?.82:0;lightTarget=burstOn?.42*crossBoost:stage==='second'?.12+.36*progressValue:stage==='prayer'?.58:stage==='white'?.58+.42*completion:stage==='coach'?.1:stage==='listen'?.08*listenRatio+.42*crossBoost:stage==='first'&&crossBoost>0?.42*crossBoost:stage==='entry'?.025:0;light=stage==='white'?lightTarget:light+(lightTarget-light)*(motion()?1-Math.exp(-dt/.9):1);cv.dataset.completion=completion.toFixed(3);cv.dataset.darkness=cap.toFixed(3);cv.dataset.light=light.toFixed(3);
- if(motion()){bandTick(dt,f,speaking);edgeTick(f);acc+=dt*SPS;let n=0;while(acc>=1&&n<8){bandForce();step();acc--;n++;}if(acc>2)acc=0;if(n)soften(Math.min(.2,VISC*n));if(sweepOn){sweep+=dt*.55;if(sweep>1.4)sweepOn=false;}if(burstOn){burstT+=dt;radialDark(dt,false,true);if(burstT>1.8){burstOn=false;crossT=0;crossBoost=0;}}else if(stage==='first'||stage==='listen')radialDark(dt,speaking,stage==='listen'&&listenRatio>=.999);else updateDark(dt,cap,sweepOn?sweep:0,progressValue>0&&speaking?6.6:0);}
+ if(motion()){bandTick(dt,f,speaking);edgeTick(f);acc+=dt*SPS;let n=0;while(acc>=1&&n<8){bandForce();step();acc--;n++;}if(acc>2)acc=0;if(n)soften(Math.min(.2,VISC*n));HA=Math.min(1,Math.max(0,acc));if(sweepOn){sweep+=dt*.55;if(sweep>1.4)sweepOn=false;}if(burstOn){burstT+=dt;radialDark(dt,false,true);if(burstT>1.8){burstOn=false;crossT=0;crossBoost=0;}}else if(stage==='first'||stage==='listen')radialDark(dt,speaking,stage==='listen'&&listenRatio>=.999);else updateDark(dt,cap,sweepOn?sweep:0,progressValue>0&&speaking?6.6:0);}
  else{D.fill(cap);edgeV=0;glowA=0;}
  edgeT=active?(speaking?1:.3):0;edgeV+=(edgeT-edgeV)*(1-Math.exp(-dt/.25));glowT=Math.max(speaking?1:active?.35:0,glowT*Math.exp(-dt*1.2));glowA+=(glowT-glowA)*(1-Math.exp(-dt/.25));stepPalette(dt);
  flashes.forEach(f=>f.t+=dt);flashes=flashes.filter(f=>f.t<1.6);if(!motion())flashes=[];
