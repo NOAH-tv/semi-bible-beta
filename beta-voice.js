@@ -150,7 +150,7 @@ function mouthGeometry(points,width,height){
  if(!points)return null;const p=i=>({x:points[i].x*width,y:points[i].y*height}),dist=(a,b)=>Math.hypot(a.x-b.x,a.y-b.y);
  const left=p(61),right=p(291),top=p(13),bottom=p(14),eyeL=p(33),eyeR=p(263),nose=p(1),w=dist(left,right),eyes=dist(eyeL,eyeR);
  if(w<width*.05||eyes<width*.15||Math.abs(eyeL.y-eyeR.y)/eyes>.22||Math.abs(dist(nose,eyeL)-dist(nose,eyeR))/eyes>.3)return null;
- return {ratio:dist(top,bottom)/w,width:w,x:(top.x+bottom.x)/2,y:(top.y+bottom.y)/2,angle:Math.atan2(right.y-left.y,right.x-left.x)};
+ return {ratio:dist(top,bottom)/w,open:dist(top,bottom)/eyes,width:w,x:(top.x+bottom.x)/2,y:(top.y+bottom.y)/2,angle:Math.atan2(right.y-left.y,right.x-left.x)};
 }
 function receiveMouth(r,data){
  if(trainer!==r)return;clearTimeout(r.workerTimeout);
