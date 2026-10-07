@@ -619,13 +619,13 @@ function renderScale(){const z=TRAIN_ZONES.find(x=>x.id===Train.zone)||TRAIN_ZON
  else actions=`<button class="primary" data-action="train-start">${icon('record')} 시작</button>`;
  return `<div class="focus-shell train-shell">${trainHead()}${careShiftCap()<12?`<p class="small care-limit">오늘은 목소리 날씨에 맞춰 높이를 낮춰 두었어요.</p>`:''}
  <div class="train-base"><span>내 편한 음 <b>${has?noteName(base.comfy):'—'}</b></span><span>지금 시작음 <b>${noteName(base.midi)}</b></span>${has&&!busy?`<button class="text-btn" data-action="train-find">${icon('record')} 다시 잡기</button>`:''}</div>
- ${Train.state==='mouth'?`<section class="mouth-gate"><strong>먼저 입 크기를 맞춰요</strong><p>손가락 두 개가 입 사이에 들어갈 만큼 벌려요.<br>맞는 크기로 잠깐 멈추면 시작해요.</p><div class="care-meter"><i id="mouth-hold" style="width:0%"></i></div><div id="train-cam-slot" class="mouth-gate-cam"></div></section>`:''}
+ ${Train.state==='mouth'?`<section class="mouth-gate"><strong>먼저 ‘아—’로 입 크기를 맞춰요</strong><p>손가락 두 개가 입 사이에 들어갈 만큼 크게 벌려요.<br>발음을 크게 하는 기준이에요. 그 크기로 잠깐 멈추면 시작해요.</p><div class="care-meter"><i id="mouth-hold" style="width:0%"></i></div><div id="train-cam-slot" class="mouth-gate-cam"></div></section>`:''}
  ${Train.state==='mouth'?'':`<div class="train-lane" aria-label="5음 스케일">${TRAIN_STEPS.map((st,i)=>`<i class="train-note ${hits[i]===true?'hit':hits[i]==='warn'?'warn':hits[i]===false?'miss':''} ${run?.at===i?'now':''}" style="--h:${st}" data-i="${i}"><b>${z.vowel}</b><small>${noteName((run?.baseMidi??base.midi)+st)}</small></i>`).join('')}</div>`}
  <p class="train-status" id="train-status" role="status">${status}</p>
  ${P?`<section class="train-verdict"><strong>${noteName(v.midi)}에서 ${P.line}</strong><p>${P.name} · 바로 아래 ${noteName(v.safeMidi)}까지만 올라가도록 시작음을 낮췄어요.<br>${P.tip}</p></section>`:''}
  <div class="focus-actions train-actions">${actions}</div>
  <div class="train-zones" role="radiogroup" aria-label="모음">${TRAIN_ZONES.map(x=>`<button class="train-zone ${x.id===z.id?'active':''}" data-train-zone="${x.id}" role="radio" aria-checked="${x.id===z.id}" ${busy?'disabled':''}><strong>${x.vowel}</strong><small>${x.cue}</small></button>`).join('')}</div>
- ${Train.state==='mouth'?'':trainCamHTML()}<p class="small muted train-mouth-cue">입 벌림: 손가락 두 개가 입 사이에 들어갈 만큼 벌려요</p>
+ ${Train.state==='mouth'?'':trainCamHTML()}<p class="small muted train-mouth-cue">${z.id==='mid'?'‘아’는 손가락 두 개가 입 사이에 들어갈 만큼 크게':'‘'+z.vowel+'’는 입 안(구강)을 넓게 늘리는 느낌으로'}</p>
  <p class="small muted train-note-text">음마다 음이탈·흔들림·거친 소리·바람 새는 소리를 살펴요. 목이 불편하면 바로 멈추세요.</p></div>`;}
 // YIN + 비주기성(d 최소값): 낮을수록 고른 떨림. 앱의 detectLivePitch와 같은 방식
 function trainYin(input,sampleRate){const step=Math.max(1,Math.floor(sampleRate/8000)),rate=sampleRate/step,n=Math.floor(input.length/step),x=new Float32Array(n);let mean=0,power=0;for(let i=0;i<n;i++){let sum=0;for(let j=0;j<step;j++)sum+=input[i*step+j];x[i]=sum/step;mean+=x[i];}mean/=n;for(let i=0;i<n;i++){x[i]-=mean;power+=x[i]*x[i];}if(Math.sqrt(power/n)<.006)return {hz:null,ap:1};const lo=Math.floor(rate/800),hi=Math.ceil(rate/65),w=Math.min(384,n-hi-2);if(w<160)return {hz:null,ap:1};const d=new Float32Array(hi+2);for(let t=1;t<=hi+1;t++){let sum=0;for(let j=0;j<w;j++){const a=x[j]-x[j+t];sum+=a*a;}d[t]=sum;}let run=0;d[0]=1;for(let t=1;t<=hi+1;t++){run+=d[t];d[t]=run?d[t]*t/run:1;}let best=-1,min=1,minT=-1;for(let t=lo;t<=hi;t++){if(d[t]<min){min=d[t];minT=t;}if(best<0&&d[t]<.15){while(t<hi&&d[t+1]<d[t])t++;best=t;break;}}if(best<0)return {hz:null,ap:min};const a=d[best-1],b=d[best],z=d[best+1],den=a-2*b+z,hz=rate/(best+(den?.5*(a-z)/den:0));return {hz:hz>=65&&hz<=800?hz:null,ap:d[best]};}
@@ -684,7 +684,7 @@ function trainProblem(run,i,kind){run.hits[i]='warn';run.at=-1;const P=TRAIN_PRO
  const newBase=Math.min(run.baseMidi-1,midi-8),cur=trainBaseHz();trainSetShift(Train.shift+(newBase-run.baseMidi));
  Train.zone=P.zone;localPut('pilsa-train-zone',Train.zone);Train.verdict={problem:kind,midi,safeMidi:midi-1,note:i,zone:P.zone};
  trainLog(run,{problem:kind,midi});trainCleanup(run);Train.state='idle';render();}
-function trainMouthCheck(run){if(!run.mouthFrames)return;const f=run.mouthFrames.reduce((a,b)=>a+b,0),k=run.mouthOk.reduce((a,b)=>a+b,0);if(f>=10&&k/f<.5)Train.mouthPassed=false;}
+function trainMouthCheck(run){if(!run.mouthFrames||run.zone!=='mid')return;const f=run.mouthFrames.reduce((a,b)=>a+b,0),k=run.mouthOk.reduce((a,b)=>a+b,0);if(f>=10&&k/f<.5)Train.mouthPassed=false;}
 function trainLog(run,extra){trainMouthCheck(run);const log=localGet('pilsa-train-log',[]);log.unshift({ts:Date.now(),zone:run.zone,baseMidi:run.baseMidi,hits:run.hits,notes:run.notes.map(n=>({n:n.hz.length,sd:n.sd?Math.round(n.sd):null,rough:n.loud?Math.round(n.rough/n.loud*100):null,hf:Number.isFinite(n.hfm)?Math.round(n.hfm):null})),mouth:run.mouthFrames?run.mouthOk.map((k,i)=>run.mouthFrames[i]?Math.round(k/run.mouthFrames[i]*100):null):null,...extra});localPut('pilsa-train-log',log.slice(0,200));}
 function trainFinish(run){const ok=run.hits.filter(h=>h===true).length;Train.verdict=ok>=7?{clean:true}:{retry:true};trainLog(run,{clean:ok>=7});trainCleanup(run);Train.state='idle';render();if(!(ok>=7)){const el=$('train-status');if(el)el.textContent='가이드를 따라 천천히 한 번 더 해 봐요.';}}
 function trainPaint(run){document.querySelectorAll('.train-note').forEach((el,k)=>{el.classList.toggle('now',k===run.at);el.classList.toggle('hit',run.hits[k]===true);el.classList.toggle('warn',run.hits[k]==='warn');el.classList.toggle('miss',run.hits[k]===false);});}
@@ -783,7 +783,9 @@ function careStop(){const r=Care.run;if(!r)return;r.stop=true;r.next?.();careCle
 
 // 입 모양 같이 보기: 앞 카메라 → mouth-worker(MediaPipe) → 입 벌림 비율(입술 사이 ÷ 입 너비). 영상은 저장하지 않음.
 // 벌림 기준: 입술 사이 ÷ 두 눈 바깥 끝 거리. 손가락 두 개(약 3cm) ≈ 0.30 이상 — 임시, 실측으로 조정
-const MOUTH_OPEN={min:.3,max:.7,cue:'손가락 두 개가 입 사이에 들어갈 만큼 벌려요'},MOUTH_BANDS={up:MOUTH_OPEN,mid:MOUTH_OPEN,low:MOUTH_OPEN};
+const MOUTH_OPEN={min:.3,max:.7,cue:'손가락 두 개가 입 사이에 들어갈 만큼 벌려요'},MOUTH_BANDS={mid:MOUTH_OPEN};
+// 손가락 두 개 기준은 '아'(그리고 시작 전 맞추기)에서만. '으'·'이'는 구강을 늘리는 느낌이라 크기를 재지 않는다
+function mouthBand(){return Train.state==='mouth'||Train.zone==='mid'?MOUTH_OPEN:null;}
 function trainCamHTML(){const on=!!Train.cam;return `<div class="train-cam-row"><button class="secondary" data-action="train-cam" aria-pressed="${on}">${icon('wave')} ${on?'입 모양 보기 끄기':'입 모양 같이 보기'}</button></div><div id="train-cam-slot"></div>`;}
 function trainMountCam(){const slot=$('train-cam-slot'),c=Train.cam;if(slot&&c&&c.box.parentNode!==slot)slot.appendChild(c.box);if(c)trainMouthStatus();}
 async function trainCamStart(){if(Train.cam)return;const box=document.createElement('div');box.className='train-cam';box.innerHTML='<video playsinline muted autoplay></video><canvas></canvas><p class="train-mouth" role="status">카메라를 준비하고 있어요</p>';const c={box,video:box.querySelector('video'),canvas:box.querySelector('canvas'),face:null,ready:false,pending:false};Train.cam=c;render();
@@ -793,12 +795,13 @@ async function trainCamStart(){if(Train.cam)return;const box=document.createElem
  }catch(e){trainCamStop();toast(e?.name==='NotAllowedError'?'카메라를 허용하면 입 모양을 같이 볼 수 있어요.':'카메라를 시작하지 못했어요. 소리 훈련은 그대로 할 수 있어요.');}}
 function trainMouthMessage(c,d){if(Train.cam!==c)return;if(d.type==='ready'){c.ready=true;trainMouthStatus();return;}if(d.type==='error'){trainCamStop();toast('입 모양 인식을 준비하지 못했어요. 소리 훈련은 그대로 할 수 있어요.');return;}
  if(d.type!=='face')return;c.pending=false;const w=c.video.videoWidth,h=c.video.videoHeight;c.face=typeof mouthGeometry==='function'?mouthGeometry(d.points,w,h):null;c.faceAt=performance.now();
- const cv=c.canvas;cv.width=w;cv.height=h;const ctx=cv.getContext('2d');ctx.clearRect(0,0,w,h);const band=MOUTH_BANDS[Train.zone]||MOUTH_BANDS.mid,f=c.face;
- if(f){const o=f.open??f.ratio,ok=o>=band.min&&o<=band.max,gap=f.ratio*f.width,goal=o>0?gap/o*(band.min+.06):f.width*.6;ctx.setLineDash([6,6]);ctx.lineWidth=3;ctx.strokeStyle='#ffffffa0';ctx.beginPath();ctx.ellipse(f.x,f.y,f.width*.55,Math.max(4,goal/2),f.angle,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
+ const cv=c.canvas;cv.width=w;cv.height=h;const ctx=cv.getContext('2d');ctx.clearRect(0,0,w,h);const band=mouthBand(),f=c.face;
+ if(f&&!band){ctx.strokeStyle='#ffffffb0';ctx.lineWidth=3;ctx.beginPath();[78,191,81,82,13,312,311,415,308,324,318,402,317,14,87,178,88,95,78].filter(i=>d.points?.[i]).forEach((i,n)=>{const q=d.points[i];n?ctx.lineTo(q.x*w,q.y*h):ctx.moveTo(q.x*w,q.y*h);});ctx.closePath();ctx.stroke();}
+ if(f&&band){const o=f.open??f.ratio,ok=o>=band.min&&o<=band.max,gap=f.ratio*f.width,goal=o>0?gap/o*(band.min+.06):f.width*.6;ctx.setLineDash([6,6]);ctx.lineWidth=3;ctx.strokeStyle='#ffffffa0';ctx.beginPath();ctx.ellipse(f.x,f.y,f.width*.55,Math.max(4,goal/2),f.angle,0,Math.PI*2);ctx.stroke();ctx.setLineDash([]);
   ctx.strokeStyle=ok?'#9ff0c4':'#ffd08a';ctx.lineWidth=3;ctx.beginPath();[78,191,81,82,13,312,311,415,308,324,318,402,317,14,87,178,88,95,78].filter(i=>d.points?.[i]).forEach((i,n)=>{const q=d.points[i];n?ctx.lineTo(q.x*w,q.y*h):ctx.moveTo(q.x*w,q.y*h);});ctx.closePath();ctx.stroke();}
  trainMouthStatus();}
-function trainMouthOk(){const c=Train.cam,f=c?.face,band=MOUTH_BANDS[Train.zone]||MOUTH_BANDS.mid;if(!f||performance.now()-(c.faceAt||0)>700)return null;const o=f.open??f.ratio;return o<band.min?'more':o>band.max?'less':'ok';}
-function trainMouthStatus(){const c=Train.cam,el=c?.box.querySelector('.train-mouth');if(!el)return;const band=MOUTH_BANDS[Train.zone]||MOUTH_BANDS.mid,st=trainMouthOk();el.dataset.state=st||'none';el.textContent=!c.ready?'입 모양 인식을 준비하고 있어요':st===null?'얼굴을 화면 가운데에 보여 주세요':st==='ok'?'좋아요, 이 크기예요':st==='more'?'조금 더 · 손가락 두 개만큼':'조금만 덜 벌려도 돼요';el.title=band.cue;}
+function trainMouthOk(){const c=Train.cam,f=c?.face,band=mouthBand();if(!band||!f||performance.now()-(c.faceAt||0)>700)return null;const o=f.open??f.ratio;return o<band.min?'more':o>band.max?'less':'ok';}
+function trainMouthStatus(){const c=Train.cam,el=c?.box.querySelector('.train-mouth');if(!el)return;const band=mouthBand(),st=trainMouthOk();el.dataset.state=st||'none';el.textContent=!c.ready?'입 모양 인식을 준비하고 있어요':!band?'‘으’·‘이’는 입 안을 넓게 늘리는 느낌으로':st===null?'얼굴을 화면 가운데에 보여 주세요':st==='ok'?'좋아요, 이 크기예요':st==='more'?'조금 더 · 손가락 두 개만큼':'조금만 덜 벌려도 돼요';el.title=band?.cue||'';}
 function trainCamStop(){const c=Train.cam;if(!c)return;Train.cam=null;clearInterval(c.timer);c.stream?.getTracks().forEach(t=>t.stop());c.worker?.terminate();c.box.remove();if(view==='train')render();}
 
 // 또렷한 가이드 음색: 기본음 + 배음(맑은 리드 소리). 폰 스피커가 못 내는 낮은 기본음도 배음으로 들린다.
